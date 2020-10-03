@@ -22,6 +22,11 @@ parse p input =
 
 ------------------------------------------------------------------------------------------
 
+-- | A parser that gets the next character (or fails if there is no more input)
+get :: Parser Char
+get "" = Nothing
+get (c:cs) = Just (c, cs)
+
 -- | A parser that always succeeds without consuming input
 return :: a -> Parser a
 return result s = Just (result, s)
@@ -80,14 +85,12 @@ pfail _ = Nothing
                             Nothing -> Nothing
                             Just (_, s'') -> Just (result1, s'')
 
-
--- | Constructs a parser that matches a specific character
-getCharThat :: (Char -> Bool) -> Parser Char
-getCharThat _ "" = Nothing
-getCharThat cond (c:cs) = 
-  if cond c 
-    then Just (c, cs)
-    else Nothing 
+-- | A parser that succeeds if the result of another parser p satisfies a predicate
+(<=>) :: Parser a -> (a -> Bool) -> Parser a
+(p <=> cond) s = 
+  case p s of
+    Nothing -> Nothing
+    Just (result, s') -> if cond result then Just (result, s') else Nothing
 
 -- | Use a function to transform a parse result.
 (>>=:) :: Parser a -> (a -> b) -> Parser b
@@ -105,6 +108,10 @@ many p = (p <:> many p) <|> return []
 -- | A parser combinator that parses one or more instances of p
 some :: Parser a -> Parser [a]
 some p = p <:> many p
+
+-- | Constructs a parser that matches a specific character
+getCharThat :: (Char -> Bool) -> Parser Char
+getCharThat cond = get <=> cond
 
 -- | A parser that matches a digit
 digit :: Parser Char
