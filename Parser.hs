@@ -1,6 +1,6 @@
 module Parser where
 
-import Prelude hiding (return)
+import Prelude hiding (return, (>>=), (>>))
 import Data.Char
 
 
@@ -36,71 +36,70 @@ pfail :: Parser a
 pfail _ = Nothing
 
 -- | A parser combinator for alternatives
+infixl 3 <|>
 (<|>) :: Parser a -> Parser a -> Parser a
 (p1 <|> p2) s = 
   case p1 s of
     Just (result, s') -> Just (result, s')
     Nothing -> p2 s
     
--- | A parser combinator for concatenating two parsers
-(<++>) :: Parser [a] -> Parser [a] -> Parser [a]
-(p1 <++> p2) s =
-  case p1 s of
-    Nothing -> Nothing
-    Just (result1, s') -> case p2 s' of
-                            Nothing -> Nothing
-                            Just (result2, s'') -> Just (result1 ++ result2, s'')
-
--- | A parser combinator for concatenating two parsers
-(<:>) :: Parser a -> Parser [a] -> Parser [a]
-(p1 <:> p2) s =
-  case p1 s of
-    Nothing -> Nothing
-    Just (result1, s') -> case p2 s' of
-                            Nothing -> Nothing
-                            Just (result2, s'') -> Just (result1 : result2, s'')
-
--- | A parser combinator for sequencing two parsers
-(<+>) :: Parser a -> Parser b -> Parser (a, b)
-(p1 <+> p2) s =
-  case p1 s of
-    Nothing -> Nothing    
-    Just (result1, s') -> case p2 s' of
-                            Nothing -> Nothing
-                            Just (result2, s'') -> Just ( (result1, result2), s'')
-
--- | A parser combinator that discards the left result
-(<-+>) :: Parser a -> Parser b -> Parser b
-(p1 <-+> p2) s =
-  case p1 s of
-    Nothing -> Nothing
-    Just (_, s') -> p2 s'
-
--- | A parser combinator that discards the right result
-(<+->) :: Parser a -> Parser b -> Parser a
-(p1 <+-> p2) s =
-  case p1 s of
-    Nothing -> Nothing
-    Just (result1, s') -> case p2 s' of
-                            Nothing -> Nothing
-                            Just (_, s'') -> Just (result1, s'')
-
--- | A parser that succeeds if the result of another parser p satisfies a predicate
-(<=>) :: Parser a -> (a -> Bool) -> Parser a
-(p <=> cond) s = 
+-- | The "bind" operator: transforms a parser using a function that uses the parse result
+--   to create a new parser.
+infixl 1 >>=
+(>>=) :: Parser a -> (a -> Parser b) -> Parser b
+(p >>= f) s = 
   case p s of
     Nothing -> Nothing
-    Just (result, s') -> if cond result then Just (result, s') else Nothing
-
--- | Use a function to transform a parse result.
-(>>=:) :: Parser a -> (a -> b) -> Parser b
-(p >>=: f) s =
-  case p s of 
-    Nothing -> Nothing
-    Just (result, s') -> Just (f result, s')
+    Just (result, s') -> f result s'
 
 ------------------------------------------------------------------------------------------
 
+-- | Use a function to transform a parse result.
+infixl 1 >>=:
+(>>=:) :: Parser a -> (a -> b) -> Parser b
+p >>=: f = p >>= return . f
+
+-- | Parse, but ignore the result and produce a different parser
+infixl 1 >>
+(>>) :: Parser a -> Parser b -> Parser b
+p1 >> p2 = p1 >>= \_ -> p2
+
+-- | A parser combinator for sequencing two parsers
+(<+>) :: Parser a -> Parser b -> Parser (a, b)
+p1 <+> p2 = 
+  p1 >>= \result1 ->
+    p2 >>= \result2 ->
+      return (result1, result2)
+
+-- | A parser combinator for concatenating two parsers
+(<:>) :: Parser a -> Parser [a] -> Parser [a]
+p1 <:> p2 = 
+  p1 >>= \result1 ->
+    p2 >>= \result2 ->
+      return (result1 : result2)
+
+-- | A parser combinator for concatenating two parsers
+(<++>) :: Parser [a] -> Parser [a] -> Parser [a]
+p1 <++> p2 = 
+  p1 >>= \result1 ->
+    p2 >>= \result2 ->
+      return (result1 ++ result2)
+
+-- | A parser that succeeds if the result of another parser p satisfies a predicate
+(<=>) :: Parser a -> (a -> Bool) -> Parser a
+p <=> cond = 
+  p >>= \result -> if cond result then return result else pfail
+
+-- | A parser combinator that discards the left result
+(<-+>) :: Parser a -> Parser b -> Parser b
+p1 <-+> p2 = p1 >> p2
+
+-- | A parser combinator that discards the right result
+(<+->) :: Parser a -> Parser b -> Parser a
+p1 <+-> p2 = 
+  p1 >>= \result1 ->
+    p2 >> return result1
+    
 -- | A parser combinator that parses zero or more instances of p
 many :: Parser a -> Parser [a]
 many p = (p <:> many p) <|> return []
