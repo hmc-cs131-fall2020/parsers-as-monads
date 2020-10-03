@@ -41,44 +41,44 @@ pfail _ = Nothing
 (<++>) :: Parser [a] -> Parser [a] -> Parser [a]
 (p1 <++> p2) s =
   case p1 s of
+    Nothing -> Nothing
     Just (result1, s') -> case p2 s' of
                             Nothing -> Nothing
                             Just (result2, s'') -> Just (result1 ++ result2, s'')
-    Nothing -> Nothing
 
 -- | A parser combinator for concatenating two parsers
 (<:>) :: Parser a -> Parser [a] -> Parser [a]
 (p1 <:> p2) s =
   case p1 s of
+    Nothing -> Nothing
     Just (result1, s') -> case p2 s' of
                             Nothing -> Nothing
                             Just (result2, s'') -> Just (result1 : result2, s'')
-    Nothing -> Nothing
 
 -- | A parser combinator for sequencing two parsers
 (<+>) :: Parser a -> Parser b -> Parser (a, b)
 (p1 <+> p2) s =
   case p1 s of
+    Nothing -> Nothing    
     Just (result1, s') -> case p2 s' of
                             Nothing -> Nothing
                             Just (result2, s'') -> Just ( (result1, result2), s'')
-    Nothing -> Nothing    
 
 -- | A parser combinator that discards the left result
 (<-+>) :: Parser a -> Parser b -> Parser b
 (p1 <-+> p2) s =
   case p1 s of
-    Just (_, s') -> p2 s'
     Nothing -> Nothing
+    Just (_, s') -> p2 s'
 
 -- | A parser combinator that discards the right result
 (<+->) :: Parser a -> Parser b -> Parser a
 (p1 <+-> p2) s =
   case p1 s of
+    Nothing -> Nothing
     Just (result1, s') -> case p2 s' of
                             Nothing -> Nothing
                             Just (_, s'') -> Just (result1, s'')
-    Nothing -> Nothing
 
 
 -- | Constructs a parser that matches a specific character
@@ -93,8 +93,8 @@ getCharThat cond (c:cs) =
 (>>=:) :: Parser a -> (a -> b) -> Parser b
 (p >>=: f) s =
   case p s of 
-    Just (result, s') -> Just (f result, s')
     Nothing -> Nothing
+    Just (result, s') -> Just (f result, s')
 
 ------------------------------------------------------------------------------------------
 
