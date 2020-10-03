@@ -6,9 +6,9 @@ import Data.Char
 
 ------------------------------------------------------------------------------------------
 
--- | A parsing function is a function from a string (input) to a result (a Maybe "state
+-- | A Parser is a function from a string (input) to a result (a Maybe "state
 --   pair). If successful the value contains the parse result and the remainder input to
---   parse. A parser is parameterized by its result type
+--   parse. A parser is parameterized by its result type.
 type Parser a = String -> Maybe (a, String)
 
 -- | Runs a parser on an input and returns true if and only if the parser succeeds on the
