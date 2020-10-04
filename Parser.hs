@@ -1,6 +1,15 @@
-module Parser where
+module Parser (
+    Parser 
+  , parse
+  , get, pfail
+  , (<|>), some, many
+  , (>>=:), (<+>), (<:>), (<++>), (<=>), (<-+>), (<+->)
+  , getCharThat, digit, digits, letter, letters, space, spaces
+  , skipws, number, sym
+) where
 
-import Prelude hiding (return, (>>=), (>>))
+import Control.Monad
+import Control.Applicative
 import Data.Char
 
 
@@ -22,40 +31,55 @@ parse (ParsingFunction p) input =
 
 ------------------------------------------------------------------------------------------
 
+instance Functor Parser where 
+    fmap f p = p >>=: f
+
+instance Applicative Parser where
+    pure = return
+    p1 <*> p2 = do f <- p1
+                   result <- p2
+                   return (f result)
+
+instance Monad Parser where
+    -- | A parser that always succeeds without consuming input 
+    return value = ParsingFunction (\s -> Just (value, s))
+
+    -- | The "bind" operator: transforms a parser using a function that uses 
+    --   the parse result to create a new parser.
+    (ParsingFunction p) >>= f = ParsingFunction bindFunc
+      where bindFunc s = 
+              case p s of
+                Nothing -> Nothing
+                Just (result, s') -> let (ParsingFunction p') = f result in p' s'
+
+instance Alternative Parser where
+  empty = pfail
+
+  -- | A parser combinator for alternatives
+  (ParsingFunction p1) <|> (ParsingFunction p2) = ParsingFunction alternativeFunc 
+    where alternativeFunc s = 
+            case p1 s of
+              Just (result, s') -> Just (result, s')
+              Nothing -> p2 s
+
+  -- | A parser combinator that parses zero or more instances of p
+  many p = p <:> many p <|> return []
+  
+  -- | A parser combinator that parses one or more instances of p
+  some p = p <:> many p
+
+------------------------------------------------------------------------------------------
+
 -- | A parser that gets the next character (or fails if there is no more input)
 get :: Parser Char
 get = ParsingFunction getFunc
   where getFunc "" = Nothing
         getFunc (c:cs) = Just (c, cs)
 
--- | A parser that always succeeds without consuming input
-return :: a -> Parser a
-return result = ParsingFunction returnFunc
-  where returnFunc s = Just (result, s)
-
 -- | A parser that always fails without consuming input
 pfail :: Parser a
 pfail = ParsingFunction pfailFunc
   where pfailFunc _ = Nothing
-
--- | A parser combinator for alternatives
-infixl 3 <|>
-(<|>) :: Parser a -> Parser a -> Parser a
-(ParsingFunction p1) <|> (ParsingFunction p2) = ParsingFunction alternativeFunc 
-  where alternativeFunc s = 
-          case p1 s of
-            Just (result, s') -> Just (result, s')
-            Nothing -> p2 s
-    
--- | The "bind" operator: transforms a parser using a function that uses the parse result
---   to create a new parser.
-infixl 1 >>=
-(>>=) :: Parser a -> (a -> Parser b) -> Parser b
-(ParsingFunction p) >>= f = ParsingFunction bindFunc
-  where bindFunc s = 
-          case p s of
-            Nothing -> Nothing
-            Just (result, s') -> let (ParsingFunction p') = f result in p' s'
 
 ------------------------------------------------------------------------------------------
 
@@ -64,31 +88,23 @@ infixl 1 >>=:
 (>>=:) :: Parser a -> (a -> b) -> Parser b
 p >>=: f = p >>= return . f
 
--- | Parse, but ignore the result and produce a different parser
-infixl 1 >>
-(>>) :: Parser a -> Parser b -> Parser b
-p1 >> p2 = p1 >>= \_ -> p2
-
 -- | A parser combinator for sequencing two parsers
 (<+>) :: Parser a -> Parser b -> Parser (a, b)
-p1 <+> p2 = 
-  p1 >>= \result1 ->
-    p2 >>= \result2 ->
-      return (result1, result2)
+p1 <+> p2 = do result1 <- p1
+               result2 <- p2
+               return (result1, result2)
 
 -- | A parser combinator for concatenating two parsers
 (<:>) :: Parser a -> Parser [a] -> Parser [a]
-p1 <:> p2 = 
-  p1 >>= \result1 ->
-    p2 >>= \result2 ->
-      return (result1 : result2)
+p1 <:> p2 =  do result1 <- p1
+                result2 <- p2
+                return (result1 : result2)
 
 -- | A parser combinator for concatenating two parsers
 (<++>) :: Parser [a] -> Parser [a] -> Parser [a]
-p1 <++> p2 = 
-  p1 >>= \result1 ->
-    p2 >>= \result2 ->
-      return (result1 ++ result2)
+p1 <++> p2 =  do result1 <- p1
+                 result2 <- p2
+                 return (result1 ++ result2)
 
 -- | A parser that succeeds if the result of another parser p satisfies a predicate
 (<=>) :: Parser a -> (a -> Bool) -> Parser a
@@ -101,18 +117,10 @@ p1 <-+> p2 = p1 >> p2
 
 -- | A parser combinator that discards the right result
 (<+->) :: Parser a -> Parser b -> Parser a
-p1 <+-> p2 = 
-  p1 >>= \result1 ->
-    p2 >> return result1
+p1 <+-> p2 =  do result1 <- p1
+                 _ <- p2
+                 return result1
     
--- | A parser combinator that parses zero or more instances of p
-many :: Parser a -> Parser [a]
-many p = (p <:> many p) <|> return []
-
--- | A parser combinator that parses one or more instances of p
-some :: Parser a -> Parser [a]
-some p = p <:> many p
-
 -- | Constructs a parser that matches a specific character
 getCharThat :: (Char -> Bool) -> Parser Char
 getCharThat cond = get <=> cond
