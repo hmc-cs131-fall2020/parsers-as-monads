@@ -9,12 +9,12 @@ import Data.Char
 -- | A Parser is a function from a string (input) to a result (a Maybe "state
 --   pair). If successful the value contains the parse result and the remainder input to
 --   parse. A parser is parameterized by its result type.
-type Parser a = String -> Maybe (a, String)
+newtype Parser a = ParsingFunction (String -> Maybe (a, String))
 
 -- | Runs a parser on an input and returns true if and only if the parser succeeds on the
 --   entire string
 parse :: Parser a -> String -> a
-parse p input = 
+parse (ParsingFunction p) input = 
   case p input of 
     Just (result, "") -> result
     Just (_, remainder) -> error ("Unexpected input: " ++ remainder)
@@ -24,33 +24,38 @@ parse p input =
 
 -- | A parser that gets the next character (or fails if there is no more input)
 get :: Parser Char
-get "" = Nothing
-get (c:cs) = Just (c, cs)
+get = ParsingFunction getFunc
+  where getFunc "" = Nothing
+        getFunc (c:cs) = Just (c, cs)
 
 -- | A parser that always succeeds without consuming input
 return :: a -> Parser a
-return result s = Just (result, s)
+return result = ParsingFunction returnFunc
+  where returnFunc s = Just (result, s)
 
 -- | A parser that always fails without consuming input
 pfail :: Parser a
-pfail _ = Nothing
+pfail = ParsingFunction pfailFunc
+  where pfailFunc _ = Nothing
 
 -- | A parser combinator for alternatives
 infixl 3 <|>
 (<|>) :: Parser a -> Parser a -> Parser a
-(p1 <|> p2) s = 
-  case p1 s of
-    Just (result, s') -> Just (result, s')
-    Nothing -> p2 s
+(ParsingFunction p1) <|> (ParsingFunction p2) = ParsingFunction alternativeFunc 
+  where alternativeFunc s = 
+          case p1 s of
+            Just (result, s') -> Just (result, s')
+            Nothing -> p2 s
     
 -- | The "bind" operator: transforms a parser using a function that uses the parse result
 --   to create a new parser.
 infixl 1 >>=
 (>>=) :: Parser a -> (a -> Parser b) -> Parser b
-(p >>= f) s = 
-  case p s of
-    Nothing -> Nothing
-    Just (result, s') -> f result s'
+(ParsingFunction p) >>= f = ParsingFunction bindFunc
+  where bindFunc s = 
+          case p s of
+            Nothing -> Nothing
+            Just (result, s') -> let (ParsingFunction p') = f result in p' s'
 
 ------------------------------------------------------------------------------------------
 
